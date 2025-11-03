@@ -24,7 +24,9 @@ except ImportError as exc:  # pragma: no cover
 class Stage2Runner:
     """Load and execute the Stage2 ONNX graph on host CPU."""
 
-    def __init__(self, onnx_path: str | Path, providers: Optional[list[str]] = None) -> None:
+    def __init__(
+        self, onnx_path: str | Path, providers: Optional[list[str]] = None
+    ) -> None:
         self.onnx_path = Path(onnx_path)
         if providers is None:
             providers = ["CPUExecutionProvider"]
@@ -32,20 +34,31 @@ class Stage2Runner:
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
 
-    def __call__(self, stage1_feat: np.ndarray) -> np.ndarray:
+    def __call__(
+        self, stage1_feat: np.ndarray, images: Optional[np.ndarray] = None
+    ) -> np.ndarray:
         """Run Stage2 with a single Stage1 feature tensor."""
-        outputs = self.session.run([self.output_name], {self.input_name: stage1_feat})
+        feed = {self.input_name: stage1_feat}
+        needs_image = any(inp.name == "images" for inp in self.session.get_inputs())
+        if needs_image:
+            if images is None:
+                raise ValueError("Stage2 graph expects `images`, but none was provided.")
+            feed["images"] = images
+        outputs = self.session.run([self.output_name], feed)
         return outputs[0]
 
 
 def demo() -> None:
     """Small demonstration using random input and CPU sessions."""
-    stage1 = ort.InferenceSession("src_models/deimv2_stage1.onnx", providers=["CPUExecutionProvider"])
-    runner = Stage2Runner("src_models/deimv2_stage2.onnx")
+    variant = "atto"
+    stage1_path = Path("src_models") / f"deimv2_{variant}_stage1.onnx"
+    stage2_path = Path("src_models") / f"deimv2_{variant}_stage2.onnx"
+    stage1 = ort.InferenceSession(str(stage1_path), providers=["CPUExecutionProvider"])
+    runner = Stage2Runner(stage2_path)
 
     dummy = np.random.rand(1, 3, 320, 320).astype(np.float32)
     feat = stage1.run(None, {"images": dummy})[0]
-    result = runner(feat)
+    result = runner(feat, images=dummy)
     print("Stage2 output shape:", result.shape)
 
 
