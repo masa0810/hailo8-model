@@ -1,0 +1,5 @@
+src_models/
+dst_models/
+.hailo/
+.keras/
+*.log
